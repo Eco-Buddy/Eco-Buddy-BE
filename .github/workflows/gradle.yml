@@ -1,0 +1,76 @@
+name: Auto deploy to NCP
+run-name: Running
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DB_USERNAME: ${{ secrets.DB_USERNAME }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      KAKAO_API_KEY: ${{ secrets.KAKAO_API_KEY }}
+      NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+      NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
+
+    steps:
+    # 체크아웃 및 JDK 세팅
+    - name : Checkout
+      uses: actions/checkout@v3
+      with:
+        ref: main
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'zulu'
+    # Secret YML 파일 생성
+    - name: Setting secret
+      run: |
+        mkdir -p src/main/resources
+        echo "${{ secrets.SECRET_YML }}" | base64 --decode > src/main/resources/application-secret.yml
+        find src
+      shell: bash
+    # Gradle 권한 부여
+    - name: Grant permission for gradlew
+      run: chmod +x ./gradlew
+    # Test 없이 빌드
+    - name: Build with Gradle
+      run: ./gradlew clean build -x test
+    #빌드한 jar 파일을 도커 이미지로 빌드하고 도커 허브에 푸시
+    - name: web docker build and push
+      run: |
+        docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+        docker build -t ${{ secrets.DOCKER_REPO }}/eco-buddy .
+        docker push ${{ secrets.DOCKER_REPO }}/eco-buddy
+
+  deploy:
+    # needs를 통해 build job이 수행 성공시에 작업되도록 설정
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    # NCP 로그인 / docker image pull & run
+    - name: NCP login and docker image pull and run
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.NCP_HOST }}
+        username: ${{ secrets.NCP_USERNAME }}
+        password: ${{ secrets.NCP_PASSWORD }}
+        port: ${{ secrets.NCP_PORT }}
+        script: |
+          docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+          docker stop $(docker ps -a -q)
+          docker rm -f $(docker ps -a -q)
+          docker pull ${{ secrets.DOCKER_REPO }}/eco-buddy
+          docker run -d -p 4525:8080 \
+            -e DB_USERNAME=${{ secrets.DB_USERNAME }} \
+            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            -e KAKAO_API_KEY=${{ secrets.KAKAO_API_KEY }} \
+            -e NAVER_CLIENT_ID=${{ secrets.NAVER_CLIENT_ID }} \
+            -e NAVER_CLIENT_SECRET=${{ secrets.NAVER_CLIENT_SECRET }} \
+            ${{ secrets.DOCKER_REPO }}/eco-buddy
+          docker image prune -f
+          ps -ef | grep eco-buddy | grep -v grep
