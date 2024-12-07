@@ -1,3 +1,1 @@
-# Eco-Buddy-BE
-### 업데이트 내역
-24.11.05 CI, CD 구현, 카카오 로그인하여 토큰 받아오는 것 구현
+# ecobuddy_backend

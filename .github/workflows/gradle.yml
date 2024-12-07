@@ -66,6 +66,7 @@ jobs:
           docker rm -f $(docker ps -a -q)
           docker pull ${{ secrets.DOCKER_REPO }}/eco-buddy
           docker run -d -p 4525:8080 \
+            --name eco-buddy \
             -e DB_USERNAME=${{ secrets.DB_USERNAME }} \
             -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
             -e KAKAO_API_KEY=${{ secrets.KAKAO_API_KEY }} \
@@ -73,4 +74,4 @@ jobs:
             -e NAVER_CLIENT_SECRET=${{ secrets.NAVER_CLIENT_SECRET }} \
             ${{ secrets.DOCKER_REPO }}/eco-buddy
           docker image prune -f
-          ps -ef | grep eco-buddy | grep -v grep
+          docker ps | grep eco-buddy || echo "Container eco-buddy is not running"
